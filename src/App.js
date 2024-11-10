@@ -99,6 +99,23 @@ class App {
     return promotions;
   }
 
+  getActivePromotion(promotionName) {
+    const promotion = this.promotions.find(
+      (promo) => promo.name === promotionName
+    );
+
+    if (!promotion) return null;
+
+    if (
+      this.currentDate >= promotion.startDate &&
+      this.currentDate <= promotion.endDate
+    ) {
+      return promotion;
+    }
+
+    return null;
+  }
+
   async run() {
     while (true) {
       this.purchaseHistory = [];
@@ -109,20 +126,94 @@ class App {
 
       // 상품 목록 출력
       this.printProductList();
+      MissionUtils.Console.print("");
 
       // 구매 입력 처리
       let purchases = [];
-      while (true) {
-        const input = await MissionUtils.Console.readLineAsync("구매할 상품을 입력해 주세요. (종료하려면 N 입력)");
-        if (input.toUpperCase() === "N") break;
-        purchases = purchases.concat(input.split(","));
+      MissionUtils.Console.print(
+        "구매하실 상품명과 수량을 입력해 주세요."
+      );
+      let input = await MissionUtils.Console.readLineAsync("");
+      if (input.toUpperCase() === "N") {
+        MissionUtils.Console.print("감사합니다. 이용해 주셔서 감사합니다.");
+        break;
       }
+      purchases = purchases.concat(input.split(","));
 
       // 구매 처리
-      this.processPurchases(purchases);
+      for (let purchase of purchases) {
+        // 입력 형식 검증 및 파싱
+        const match = purchase.match(/\[(.+)-(\d+)\]/);
+        if (!match) {
+          MissionUtils.Console.print("[ERROR] 잘못된 형식의 입력입니다.");
+          continue;
+        }
 
-      // 프로모션 적용 처리
-      this.applyPromotions();
+        const name = match[1].trim();
+        const quantity = parseInt(match[2], 10);
+
+        // 해당 상품 찾기 (재고가 있는 첫 번째 상품)
+        const productIndex = this.products.findIndex(
+          (p) => p.name === name && p.stock > 0
+        );
+        if (productIndex === -1) {
+          MissionUtils.Console.print(
+            `[ERROR] "${name}" 상품이 존재하지 않거나 재고가 부족합니다.`
+          );
+          continue;
+        }
+
+        const product = this.products[productIndex];
+
+        if (product.stock < quantity) {
+          // 에러 메시지를 테스트에서 기대하는 형식으로 변경
+          MissionUtils.Console.print(
+            "[ERROR] 재고 수량을 초과하여 구매할 수 없습니다. 다시 입력해 주세요."
+          );
+          continue;
+        }
+
+        // 프로모션 적용
+        let cost = product.price * quantity;
+        let discount = 0;
+        let freeItems = 0;
+
+        if (product.promotion) {
+          const promotion = this.getActivePromotion(product.promotion);
+          if (promotion) {
+            if (promotion.name === "탄산2+1") {
+              const totalSets = Math.floor(quantity / (promotion.buy + promotion.get));
+              freeItems = totalSets * promotion.get;
+              discount = product.price * freeItems;
+              cost = product.price * (quantity - freeItems);
+            } else if (promotion.name === "MD추천상품") {
+              // 10% 할인
+              discount = Math.round(product.price * quantity * 0.1);
+              cost = Math.round(product.price * quantity * 0.9);
+            } else if (promotion.name === "반짝할인") {
+              // 20% 할인
+              discount = Math.round(product.price * quantity * 0.2);
+              cost = Math.round(product.price * quantity * 0.8);
+            }
+            // 추가 프로모션 유형이 있다면 여기에 추가
+          }
+        }
+
+        // 총 금액에 추가
+        this.total += cost;
+
+        // 재고 업데이트
+        this.products[productIndex].stock -= quantity;
+
+        // 기록에 추가
+        this.purchaseHistory.push({
+          name: product.name,
+          quantity,
+          cost,
+          discount,
+          freeItems,
+        });
+      }
 
       // 멤버십 할인 처리
       let membershipDiscount = 0;
@@ -182,94 +273,12 @@ class App {
         "감사합니다. 구매하고 싶은 다른 상품이 있나요? (Y/N)"
       );
 
-      const input = await MissionUtils.Console.readLineAsync("");
+      input = await MissionUtils.Console.readLineAsync("");
       if (input.toUpperCase() === "N") {
         MissionUtils.Console.print("감사합니다. 이용해 주셔서 감사합니다.");
         break;
       }
     }
-  }
-
-  processPurchases(purchases) {
-    purchases.forEach((purchase) => {
-      const match = purchase.match(/\[(.+)-(\d+)\]/);
-      if (!match) {
-        MissionUtils.Console.print("[ERROR] 잘못된 형식의 입력입니다.");
-        return;
-      }
-
-      const name = match[1].trim();
-      const quantity = parseInt(match[2], 10);
-
-      // 해당 상품 찾기 (재고가 있는 첫 번째 상품)
-      const productIndex = this.products.findIndex(
-        (p) => p.name === name && p.stock > 0
-      );
-      if (productIndex === -1) {
-        MissionUtils.Console.print(`[ERROR] "${name}" 상품이 존재하지 않거나 재고가 부족합니다.`);
-        return;
-      }
-
-      const product = this.products[productIndex];
-
-      if (product.stock < quantity) {
-        MissionUtils.Console.print("[ERROR] 재고 수량을 초과하여 구매할 수 없습니다. 다시 입력해 주세요.");
-        return;
-      }
-
-      // 총 금액에 추가
-      const cost = product.price * quantity;
-      this.total += cost;
-
-      // 재고 업데이트
-      this.products[productIndex].stock -= quantity;
-
-      // 기록에 추가
-      this.purchaseHistory.push({
-        name: product.name,
-        quantity,
-        cost,
-        discount: 0,
-        freeItems: 0,
-      });
-    });
-  }
-
-  applyPromotions() {
-    this.purchaseHistory.forEach((item) => {
-      const product = this.products.find((p) => p.name === item.name);
-      if (product && product.promotion) {
-        const promotion = this.getActivePromotion(product.promotion);
-        if (promotion) {
-          if (promotion.name === "탄산2+1") {
-            const totalSets = Math.floor(item.quantity / (promotion.buy + promotion.get));
-            const freeItems = totalSets * promotion.get;
-            item.freeItems = freeItems;
-            item.discount = product.price * freeItems;
-          } else if (promotion.name === "MD추천상품") {
-            item.discount = Math.round(item.cost * 0.1);
-          } else if (promotion.name === "반짝할인") {
-            item.discount = Math.round(item.cost * 0.2);
-          }
-          this.total -= item.discount;
-        }
-      }
-    });
-  }
-
-  getActivePromotion(promotionName) {
-    const promotion = this.promotions.find((promo) => promo.name === promotionName);
-
-    if (!promotion) return null;
-
-    if (
-      this.currentDate >= promotion.startDate &&
-      this.currentDate <= promotion.endDate
-    ) {
-      return promotion;
-    }
-
-    return null;
   }
 
   printProductList() {
