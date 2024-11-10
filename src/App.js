@@ -86,6 +86,9 @@ class App {
       // 구매 처리
       this.processPurchases(purchases);
 
+      // 프로모션 적용 처리
+      this.applyPromotions();
+
       // 멤버십 할인 처리
       let membershipDiscount = 0;
       let applyMembership = false;
@@ -195,6 +198,43 @@ class App {
         freeItems: 0,
       });
     });
+  }
+
+  applyPromotions() {
+    this.purchaseHistory.forEach((item) => {
+      const product = this.products.find((p) => p.name === item.name);
+      if (product && product.promotion) {
+        const promotion = this.getActivePromotion(product.promotion);
+        if (promotion) {
+          if (promotion.name === "탄산2+1") {
+            const totalSets = Math.floor(item.quantity / (promotion.buy + promotion.get));
+            const freeItems = totalSets * promotion.get;
+            item.freeItems = freeItems;
+            item.discount = product.price * freeItems;
+          } else if (promotion.name === "MD추천상품") {
+            item.discount = Math.round(item.cost * 0.1);
+          } else if (promotion.name === "반짝할인") {
+            item.discount = Math.round(item.cost * 0.2);
+          }
+          this.total -= item.discount;
+        }
+      }
+    });
+  }
+
+  getActivePromotion(promotionName) {
+    const promotion = this.promotions.find((promo) => promo.name === promotionName);
+
+    if (!promotion) return null;
+
+    if (
+      this.currentDate >= promotion.startDate &&
+      this.currentDate <= promotion.endDate
+    ) {
+      return promotion;
+    }
+
+    return null;
   }
 
   printProductList() {
