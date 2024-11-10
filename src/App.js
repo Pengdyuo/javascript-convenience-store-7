@@ -6,11 +6,12 @@ import path from "path";
 class App {
   constructor() {
     this.products = this.loadProducts();
+    this.total = 0;
   }
 
   loadProducts() {
     const products = [];
-    // public 디렉토리의 적대 경로를 설정
+    // public 디렉토리의 절대 경로를 설정
     const filePath = path.resolve("public/products.md");
 
     try {
@@ -67,6 +68,56 @@ class App {
 
     // 상품 목록 출력
     this.printProductList();
+
+    // 구매 입력 처리
+    let purchases = [];
+    while (true) {
+      const input = await MissionUtils.Console.readLineAsync("구매할 상품을 입력해 주세요. (종료하려면 N 입력)");
+      if (input.toUpperCase() === "N") break;
+      purchases = purchases.concat(input.split(","));
+    }
+
+    // 구매 처리
+    this.processPurchases(purchases);
+
+    // 총 금액 출력
+    const formattedTotal = `내실돈 ${this.total.toLocaleString("ko-KR")}원`;
+    MissionUtils.Console.print(formattedTotal);
+  }
+
+  processPurchases(purchases) {
+    purchases.forEach((purchase) => {
+      const match = purchase.match(/\[(.+)-(\d+)\]/);
+      if (!match) {
+        MissionUtils.Console.print("[ERROR] 잘못된 형식의 입력입니다.");
+        return;
+      }
+
+      const name = match[1].trim();
+      const quantity = parseInt(match[2], 10);
+
+      // 해당 상품 찾기 (재고가 있는 첫 번째 상품)
+      const productIndex = this.products.findIndex(
+        (p) => p.name === name && p.stock > 0
+      );
+      if (productIndex === -1) {
+        MissionUtils.Console.print(`[ERROR] "${name}" 상품이 존재하지 않거나 재고가 부족합니다.`);
+        return;
+      }
+
+      const product = this.products[productIndex];
+
+      if (product.stock < quantity) {
+        MissionUtils.Console.print("[ERROR] 재고 수량을 초과하여 구매할 수 없습니다. 다시 입력해 주세요.");
+        return;
+      }
+
+      // 총 금액에 추가
+      this.total += product.price * quantity;
+
+      // 재고 업데이트
+      this.products[productIndex].stock -= quantity;
+    });
   }
 
   printProductList() {
@@ -92,3 +143,4 @@ class App {
 }
 
 export default App;
+
