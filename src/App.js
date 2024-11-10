@@ -6,6 +6,7 @@ import path from "path";
 class App {
   constructor() {
     this.products = this.loadProducts();
+    this.promotions = this.loadPromotions();
     this.total = 0;
     this.purchaseHistory = [];
     this.currentDate = new Date(MissionUtils.DateTimes.now());
@@ -62,6 +63,40 @@ class App {
     }
 
     return products;
+  }
+
+  loadPromotions() {
+    const promotions = [];
+    // public 디렉토리의 절대 경로를 설정
+    const filePath = path.resolve("public/promotions.md");
+
+    try {
+      const data = fs.readFileSync(filePath, "utf-8");
+      const lines = data.split(/\r?\n/);
+
+      // 헤더를 제외하고 각 라인을 파싱
+      lines.slice(1).forEach((line) => {
+        if (line.trim() === "") return; // 빈 줄 무시
+        const [name, buy, get, start_date, end_date] = line
+          .split(",")
+          .map((item) => item.trim());
+
+        promotions.push({
+          name,
+          buy: parseInt(buy, 10),
+          get: parseInt(get, 10),
+          startDate: new Date(start_date),
+          endDate: new Date(end_date),
+        });
+      });
+    } catch (error) {
+      MissionUtils.Console.print(
+        "[ERROR] 프로모션 목록을 로드하는 중 문제가 발생했습니다."
+      );
+      process.exit(1);
+    }
+
+    return promotions;
   }
 
   async run() {
