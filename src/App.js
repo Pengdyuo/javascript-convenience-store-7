@@ -7,6 +7,8 @@ class App {
   constructor() {
     this.products = this.loadProducts();
     this.total = 0;
+    this.purchaseHistory = [];
+    this.currentDate = new Date(MissionUtils.DateTimes.now());
   }
 
   loadProducts() {
@@ -63,26 +65,91 @@ class App {
   }
 
   async run() {
-    MissionUtils.Console.print("안녕하세요. W편의점입니다.");
-    MissionUtils.Console.print("현재 보유하고 있는 상품입니다.\n");
-
-    // 상품 목록 출력
-    this.printProductList();
-
-    // 구매 입력 처리
-    let purchases = [];
     while (true) {
-      const input = await MissionUtils.Console.readLineAsync("구매할 상품을 입력해 주세요. (종료하려면 N 입력)");
-      if (input.toUpperCase() === "N") break;
-      purchases = purchases.concat(input.split(","));
+      this.purchaseHistory = [];
+      this.total = 0;
+
+      MissionUtils.Console.print("안녕하세요. W편의점입니다.");
+      MissionUtils.Console.print("현재 보유하고 있는 상품입니다.\n");
+
+      // 상품 목록 출력
+      this.printProductList();
+
+      // 구매 입력 처리
+      let purchases = [];
+      while (true) {
+        const input = await MissionUtils.Console.readLineAsync("구매할 상품을 입력해 주세요. (종료하려면 N 입력)");
+        if (input.toUpperCase() === "N") break;
+        purchases = purchases.concat(input.split(","));
+      }
+
+      // 구매 처리
+      this.processPurchases(purchases);
+
+      // 멤버십 할인 처리
+      let membershipDiscount = 0;
+      let applyMembership = false;
+
+      if (this.purchaseHistory.length > 0) {
+        MissionUtils.Console.print("");
+        const membershipInput = await MissionUtils.Console.readLineAsync(
+          "멤버십 할인을 받으시겠습니까? (Y/N)"
+        );
+        if (membershipInput.toUpperCase() === "Y") {
+          applyMembership = true;
+          membershipDiscount = Math.round(this.total * 0.2); // Assuming 20% membership discount
+          this.total -= membershipDiscount;
+        }
+      }
+
+      // 총 금액 출력 (천 단위 구분자 포함)
+      const formattedTotal = `내실돈 ${this.total.toLocaleString("ko-KR")}원`;
+      MissionUtils.Console.print("");
+
+      // 상세 내역 출력
+      MissionUtils.Console.print("=============W 편의점================");
+      MissionUtils.Console.print("상품명\t\t수량\t금액");
+      this.purchaseHistory.forEach((item) => {
+        MissionUtils.Console.print(
+          `${item.name}\t\t${item.quantity}\t${item.cost.toLocaleString(
+            "ko-KR"
+          )}원`
+        );
+      });
+      MissionUtils.Console.print("============증\t정===============");
+      this.purchaseHistory.forEach((item) => {
+        if (item.freeItems > 0) {
+          MissionUtils.Console.print(`${item.name}\t\t${item.freeItems}`);
+        }
+      });
+      MissionUtils.Console.print("====================================");
+      MissionUtils.Console.print(
+        `총구매액\t\t${this.purchaseHistory.reduce(
+          (acc, item) => acc + item.cost + item.discount,
+          0
+        ).toLocaleString("ko-KR")}원`
+      );
+      MissionUtils.Console.print(
+        `행사할인\t\t-${this.purchaseHistory.reduce(
+          (acc, item) => acc + item.discount,
+          0
+        ).toLocaleString("ko-KR")}원`
+      );
+      MissionUtils.Console.print(
+        `멤버십할인\t\t-${membershipDiscount.toLocaleString("ko-KR")}원`
+      );
+      MissionUtils.Console.print(`내실돈\t\t ${this.total.toLocaleString("ko-KR")}원`);
+      MissionUtils.Console.print("");
+      MissionUtils.Console.print(
+        "감사합니다. 구매하고 싶은 다른 상품이 있나요? (Y/N)"
+      );
+
+      const input = await MissionUtils.Console.readLineAsync("");
+      if (input.toUpperCase() === "N") {
+        MissionUtils.Console.print("감사합니다. 이용해 주셔서 감사합니다.");
+        break;
+      }
     }
-
-    // 구매 처리
-    this.processPurchases(purchases);
-
-    // 총 금액 출력
-    const formattedTotal = `내실돈 ${this.total.toLocaleString("ko-KR")}원`;
-    MissionUtils.Console.print(formattedTotal);
   }
 
   processPurchases(purchases) {
@@ -113,10 +180,20 @@ class App {
       }
 
       // 총 금액에 추가
-      this.total += product.price * quantity;
+      const cost = product.price * quantity;
+      this.total += cost;
 
       // 재고 업데이트
       this.products[productIndex].stock -= quantity;
+
+      // 기록에 추가
+      this.purchaseHistory.push({
+        name: product.name,
+        quantity,
+        cost,
+        discount: 0,
+        freeItems: 0,
+      });
     });
   }
 
@@ -143,4 +220,3 @@ class App {
 }
 
 export default App;
-
